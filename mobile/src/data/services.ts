@@ -1,0 +1,100 @@
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import * as SecureStore from 'expo-secure-store';
+import type { AuthGateway, LocationService, PhotoSource } from './repository';
+import { request, setToken } from './client';
+
+const TOKEN_KEY = 'fihy.access_token';
+const USER_KEY = 'fihy.user_id';
+
+export class ApiAuthGateway implements AuthGateway {
+  private userId: string | null = null;
+
+  /** Called once at startup so a returning user is not signed out. */
+  async restore() {
+    const token = await SecureStore.getItemAsync(TOKEN_KEY);
+    if (!token) return;
+    setToken(token);
+    this.userId = await SecureStore.getItemAsync(USER_KEY);
+  }
+
+  currentUserId() {
+    return this.userId;
+  }
+
+  async requestOtp(phone: string) {
+    await request<void>('/auth/otp/request', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
+  }
+
+  async verifyOtp(phone: string, code: string) {
+    const result = await request<{ access_token: string }>('/auth/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify({ phone, code }),
+    });
+    setToken(result.access_token);
+    await SecureStore.setItemAsync(TOKEN_KEY, result.access_token);
+    const me = await request<{ id: string }>('/me');
+    this.userId = me.id;
+    await SecureStore.setItemAsync(USER_KEY, me.id);
+  }
+
+  async signOut() {
+    setToken(null);
+    this.userId = null;
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
+  }
+}
+
+export class DeviceLocationService implements LocationService {
+  async current() {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      throw new Error('Location permission is needed to place and find reports.');
+    }
+    const position = await Location.getCurrentPositionAsync({});
+    return {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+    };
+  }
+}
+
+/**
+ * Re-encodes the picked image before it leaves the device, which drops EXIF
+ * (including GPS and device model). The backend re-strips too; this is defence
+ * in depth, not a substitute.
+ */
+export async function sanitize(uri: string): Promise<string> {
+  const result = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width: 1920 } }],
+    { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
+  );
+  return result.uri;
+}
+
+export class CameraPhotoSource implements PhotoSource {
+  constructor(private source: 'camera' | 'library' = 'camera') {}
+
+  async capture() {
+    const permission =
+      this.source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error('Camera access is needed to attach evidence.');
+    }
+    const picker =
+      this.source === 'camera'
+        ? ImagePicker.launchCameraAsync
+        : ImagePicker.launchImageLibraryAsync;
+    const result = await picker({ quality: 0.9, exif: false });
+    if (result.canceled) return null;
+    return sanitize(result.assets[0].uri);
+  }
+}

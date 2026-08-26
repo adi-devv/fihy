@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "fihy",
+    "slug": "fihy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.xtanion.fihy",
+      "infoPlist": {
+        "NSCameraUsageDescription": "fihy uses your camera to document civic problems with evidence.",
+        "NSLocationWhenInUseUsageDescription": "fihy uses your location to place reports accurately and show nearby issues.",
+        "NSPhotoLibraryUsageDescription": "fihy lets you attach evidence from your photo library to a report."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.xtanion.fihy",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "fihy"
+  }
+}
