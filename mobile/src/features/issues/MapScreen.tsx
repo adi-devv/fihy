@@ -7,6 +7,7 @@ import type { GeoPoint } from '../../domain/issue';
 import { metric, type as t, useTone } from '../../theme/tokens';
 import { CategoryPlate } from './CategoryPlate';
 import { CategoryGlyph } from './glyphs';
+import { useChrome } from '../shell/chrome';
 import { Centered, Notice } from './NearbyFeed';
 
 const PIN_ZOOM_DELTA = 0.02;
@@ -15,6 +16,7 @@ export function MapScreen({ point }: { point: GeoPoint }) {
   const tone = useTone();
   const router = useRouter();
   const query = useMapIssues(point);
+  const { show, hide } = useChrome();
   const [expanded, setExpanded] = useState(false);
 
   if (query.isPending) return <Centered><ActivityIndicator color={tone.accentDeep} /></Centered>;
@@ -24,6 +26,14 @@ export function MapScreen({ point }: { point: GeoPoint }) {
     <MapView
       style={StyleSheet.absoluteFill}
       initialRegion={{ ...point, latitudeDelta: 0.06, longitudeDelta: 0.06 }}
+      // Moving the map hands the whole screen to the map. onPanDrag is
+      // unambiguously the user, and the gesture-gated start event adds pinch
+      // zoom; neither fires for the region settling on mount, which would
+      // otherwise hide the dock before it had been touched. A tap on open map
+      // brings it back, so nothing is ever stranded.
+      onPanDrag={hide}
+      onRegionChangeStart={(_, details) => details.isGesture === true && hide()}
+      onPress={show}
       onRegionChangeComplete={(region) => setExpanded(region.latitudeDelta < PIN_ZOOM_DELTA)}>
       {query.data?.items.map((issue) => (
         <Marker

@@ -1,11 +1,12 @@
-import { ArrowUp, MapPin, MessageSquare } from 'lucide-react-native';
+import { ArrowUp, Eye, MapPin } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Issue } from '../../domain/issue';
-import { categoryLabel, severityLabel, shortAge, statusLabel } from '../../domain/issue';
+import { categoryLabel, severityLabel, shortAge } from '../../domain/issue';
 import { metric, type as t, useTone } from '../../theme/tokens';
 import { CategoryPlate } from './CategoryPlate';
-import { StatusGlyph } from './glyphs';
+import { ConfirmationBar } from './ConfirmationBar';
+import { StatusIcon } from './StatusChip';
 
 export function IssueCard({
   issue,
@@ -23,7 +24,7 @@ export function IssueCard({
   return (
     <Pressable onPress={onPress} style={[styles.card, { borderBottomColor: tone.hairline }]}>
       <View style={styles.metaRow}>
-        <MapPin size={14} color={tone.chalk} />
+        <MapPin size={14} color={tone.ink} />
         <View style={styles.metaLeft}>
           <Text numberOfLines={1} style={[t.meta(12, '600', 0), { color: tone.ink, flexShrink: 1 }]}>
             {issue.locality ?? categoryLabel[issue.category]}
@@ -51,15 +52,21 @@ export function IssueCard({
       <View style={styles.actions}>
         <Pill
           icon={ArrowUp}
-          label={String(issue.confirmation_count)}
+          label={String(issue.comment_count)}
           emphasised
+          onPress={onPress}
+        />
+        <Pill
+          icon={Eye}
+          label={String(issue.confirmation_count)}
           active={issue.confirmed_by_me}
           onPress={onConfirm}
         />
-        <Pill icon={MessageSquare} label={String(issue.comment_count)} onPress={onPress} />
         <View style={{ flex: 1 }} />
-        <StatusGlyph status={issue.status} size={19} color={tone.chalk} />
+        <StatusIcon status={issue.status} size={19} />
       </View>
+
+      <ConfirmationBar issue={issue} compact />
     </Pressable>
   );
 }
@@ -78,7 +85,7 @@ function Pill({
   active?: boolean;
 }) {
   const tone = useTone();
-  const tint = emphasised ? tone.accentDeep : tone.chalk;
+  const ink = emphasised || active ? tone.accentDeep : tone.chalk;
   return (
     <Pressable
       onPress={onPress}
@@ -86,13 +93,11 @@ function Pill({
       style={[
         styles.pill,
         emphasised
-          ? { backgroundColor: active ? tone.accent : `${tone.accent}24` }
-          : { borderWidth: 1, borderColor: tone.hairline },
+          ? { backgroundColor: `${tone.accent}24` }
+          : { borderWidth: 1, borderColor: active ? tone.accent : tone.hairline },
       ]}>
-      <Icon size={17} color={active ? '#000' : tint} />
-      <Text style={[t.meta(13, '700', 0), { color: active ? '#000' : tint, marginLeft: 6 }]}>
-        {label}
-      </Text>
+      <Icon size={17} color={ink} />
+      <Text style={[t.meta(13, '700', 0), { color: ink, marginLeft: 6 }]}>{label}</Text>
     </Pressable>
   );
 }

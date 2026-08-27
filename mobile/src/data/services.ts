@@ -3,19 +3,41 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import type { AuthGateway, LocationService, PhotoSource } from './repository';
-import { request, setToken } from './client';
+import type { Tokens } from './client';
+import { onTokensChanged, request, setTokens } from './client';
 
 const TOKEN_KEY = 'fihy.access_token';
+const REFRESH_KEY = 'fihy.refresh_token';
 const USER_KEY = 'fihy.user_id';
 
 export class ApiAuthGateway implements AuthGateway {
   private userId: string | null = null;
 
+  constructor() {
+    // A refresh that replaces the pair has to reach storage, and one that
+    // fails has to clear the cached user, or the app keeps rendering as
+    // signed in against a session the server has already dropped.
+    onTokensChanged(async (next) => {
+      if (next) {
+        await SecureStore.setItemAsync(TOKEN_KEY, next.access_token);
+        await SecureStore.setItemAsync(REFRESH_KEY, next.refresh_token);
+        return;
+      }
+      this.userId = null;
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await SecureStore.deleteItemAsync(REFRESH_KEY);
+      await SecureStore.deleteItemAsync(USER_KEY);
+    });
+  }
+
   /** Called once at startup so a returning user is not signed out. */
   async restore() {
-    const token = await SecureStore.getItemAsync(TOKEN_KEY);
-    if (!token) return;
-    setToken(token);
+    const access = await SecureStore.getItemAsync(TOKEN_KEY);
+    if (!access) return;
+    // A session stored before refresh tokens were kept has no refresh half.
+    // It still works until it expires, and renew() declines without one.
+    const refresh = await SecureStore.getItemAsync(REFRESH_KEY);
+    setTokens({ access_token: access, refresh_token: refresh ?? '' });
     this.userId = await SecureStore.getItemAsync(USER_KEY);
   }
 
@@ -31,22 +53,18 @@ export class ApiAuthGateway implements AuthGateway {
   }
 
   async verifyOtp(phone: string, code: string) {
-    const result = await request<{ access_token: string }>('/auth/otp/verify', {
+    const result = await request<Tokens>('/auth/otp/verify', {
       method: 'POST',
       body: JSON.stringify({ phone, code }),
     });
-    setToken(result.access_token);
-    await SecureStore.setItemAsync(TOKEN_KEY, result.access_token);
+    setTokens(result);
     const me = await request<{ id: string }>('/me');
     this.userId = me.id;
     await SecureStore.setItemAsync(USER_KEY, me.id);
   }
 
   async signOut() {
-    setToken(null);
-    this.userId = null;
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await SecureStore.deleteItemAsync(USER_KEY);
+    setTokens(null);
   }
 }
 

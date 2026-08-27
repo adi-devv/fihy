@@ -1,92 +1,182 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Plus, User } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { useServices } from '../../data/context';
-import { useLocation } from '../../data/queries';
+import { useLocation, useProfile, useUnreadCount } from '../../data/queries';
 import { Centered, Notice, NearbyFeed } from '../issues/NearbyFeed';
 import { MapScreen } from '../issues/MapScreen';
+import { NotificationsScreen } from '../notifications/NotificationsScreen';
+import { SearchScreen } from '../search/SearchScreen';
 import { metric, type as t, useTone } from '../../theme/tokens';
+import { Avatar } from '../profile/Avatar';
+import { ChromeProvider, useChrome } from './chrome';
 import { NavIcon, type NavIconName } from './NavIcon';
 
 const SECTIONS: NavIconName[] = ['house', 'search', 'bell'];
 
+/** How far the FAB drops into the space the dock leaves behind. */
+const DOCK_HEIGHT = 52;
+
 export function HomeShell() {
+  return (
+    <ChromeProvider>
+      <Shell />
+    </ChromeProvider>
+  );
+}
+
+function Shell() {
   const tone = useTone();
   const router = useRouter();
   const { auth } = useServices();
   const [tab, setTab] = useState(0);
   const [section, setSection] = useState(0);
-  const [chromeVisible, setChromeVisible] = useState(true);
+  const { visible: chromeVisible, show } = useChrome();
   const location = useLocation();
+
+  // currentUserId is a plain read rather than state, so returning from the
+  // sign-in route needs a nudge for the avatar and the activity gate to catch up.
+  const [, setFocusTick] = useState(0);
+  useFocusEffect(useCallback(() => setFocusTick((n) => n + 1), []));
+
+  const signedIn = Boolean(auth.currentUserId());
+  const unread = useUnreadCount(signedIn);
+  const me = useProfile(signedIn ? auth.currentUserId() : null);
+
+  const mapImmersive = !chromeVisible && section === 0 && tab === 1;
+
+  const openSection = useCallback(
+    (next: number) => {
+      setSection(next);
+      show();
+    },
+    [show],
+  );
+
+  // The dock's own height is the FAB's floor, so the button keeps the same gap
+  // above whatever is below it in either state.
+  const lift = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(lift, {
+      toValue: chromeVisible ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [chromeVisible, lift]);
 
   return (
     <View style={{ flex: 1, backgroundColor: tone.bg }}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: tone.bg }}>
-        {chromeVisible && (
-          <View style={styles.masthead}>
-            <View style={{ width: 34 }} />
-            <Mark />
-            <Pressable
-              onPress={() => router.push('/auth')}
-              style={[
-                styles.avatar,
-                {
-                  backgroundColor: tone.surface,
-                  borderColor: auth.currentUserId() ? tone.accent : tone.hairline,
-                  borderWidth: auth.currentUserId() ? 1.8 : 1,
-                },
-              ]}>
-              <User size={19} color={tone.chalk} />
-            </Pressable>
-          </View>
-        )}
-        <View style={[styles.tabs, { borderBottomColor: tone.hairline }]}>
-          {['Nearby', 'Map'].map((label, i) => (
-            <Pressable key={label} style={styles.tab} onPress={() => setTab(i)}>
-              <Text style={[t.display(15, '700'), { color: i === tab ? tone.ink : tone.chalk }]}>
-                {label}
-              </Text>
-              <View
+      {!mapImmersive && (
+        <SafeAreaView edges={['top']} style={{ backgroundColor: tone.bg }}>
+          {chromeVisible && (
+            <View style={styles.masthead}>
+              <View style={{ width: 34 }} />
+              <Mark />
+              <Pressable
+                onPress={() =>
+                  router.push(signedIn ? `/users/${auth.currentUserId()}` : '/auth')
+                }
                 style={[
-                  styles.indicator,
-                  { backgroundColor: i === tab ? tone.accent : 'transparent' },
-                ]}
-              />
-            </Pressable>
-          ))}
-        </View>
-      </SafeAreaView>
+                  styles.avatar,
+                  {
+                    backgroundColor: tone.surface,
+                    borderColor: signedIn ? tone.accent : tone.hairline,
+                    borderWidth: signedIn ? 1.8 : 1,
+                  },
+                ]}>
+                {me.data ? (
+                  <Avatar
+                    id={me.data.id}
+                    name={me.data.display_name}
+                    uri={me.data.avatar_url}
+                    size={30}
+                  />
+                ) : (
+                  <User size={19} color={tone.chalk} />
+                )}
+              </Pressable>
+            </View>
+          )}
+          {chromeVisible && section === 0 && (
+            <View style={[styles.tabs, { borderBottomColor: tone.hairline }]}>
+              {['Nearby', 'Map'].map((label, i) => (
+                <Pressable key={label} style={styles.tab} onPress={() => setTab(i)}>
+                  <Text style={[t.display(15, '700'), { color: i === tab ? tone.ink : tone.chalk }]}>
+                    {label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.indicator,
+                      { backgroundColor: i === tab ? tone.accent : 'transparent' },
+                    ]}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </SafeAreaView>
+      )}
 
       <View style={{ flex: 1 }}>
-        {location.isPending && <Centered><ActivityIndicator color={tone.accentDeep} /></Centered>}
-        {location.isError && <Notice text={(location.error as Error).message} />}
-        {location.data &&
-          (tab === 0 ? (
-            <NearbyFeed point={location.data} onScrollDirection={setChromeVisible} />
-          ) : (
-            <MapScreen point={location.data} />
-          ))}
+        {section === 2 ? (
+          <NotificationsScreen />
+        ) : (
+          <>
+            {location.isPending && <Centered><ActivityIndicator color={tone.accentDeep} /></Centered>}
+            {location.isError && <Notice text={(location.error as Error).message} />}
+            {location.data &&
+              (section === 1 ? (
+                <SearchScreen point={location.data} />
+              ) : tab === 0 ? (
+                <NearbyFeed point={location.data} />
+              ) : (
+                <MapScreen point={location.data} />
+              ))}
+          </>
+        )}
       </View>
 
-      <Pressable
-        onPress={() => router.push('/report')}
-        style={[styles.fab, { backgroundColor: tone.accent }]}>
-        <Plus size={30} color="#000" />
-      </Pressable>
+      <Animated.View
+        style={[
+          styles.fab,
+          {
+            transform: [
+              {
+                translateY: lift.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [DOCK_HEIGHT, 0],
+                }),
+              },
+            ],
+          },
+        ]}>
+        <Pressable
+          onPress={() => router.push('/report')}
+          style={[styles.fabButton, { backgroundColor: tone.accent }]}>
+          <Plus size={30} color="#000" />
+        </Pressable>
+      </Animated.View>
 
       {chromeVisible && (
         <SafeAreaView edges={['bottom']} style={{ backgroundColor: tone.bg }}>
           <View style={[styles.sectionBar, { borderTopColor: tone.hairline }]}>
             {SECTIONS.map((name, i) => (
-              <Pressable key={name} style={styles.section} onPress={() => setSection(i)}>
+              <Pressable key={name} style={styles.section} onPress={() => openSection(i)}>
                 <NavIcon
                   name={name}
                   filled={i === section}
                   color={i === section ? tone.accentDeep : tone.chalk}
                 />
+                {name === 'bell' && unread > 0 && (
+                  <View style={[styles.badge, { backgroundColor: tone.accent, borderColor: tone.bg }]}>
+                    <Text style={[t.meta(10, '700', 0), { color: '#000' }]}>
+                      {unread > 9 ? '9+' : unread}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
             ))}
           </View>
@@ -121,10 +211,16 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', borderBottomWidth: 1 },
   tab: { flex: 1, alignItems: 'center' },
   indicator: { height: 3, width: 34, borderRadius: 2, marginTop: 8 },
-  fab: {
-    position: 'absolute', right: 20, bottom: 90, width: 58, height: 58,
-    borderRadius: 29, alignItems: 'center', justifyContent: 'center',
+  fab: { position: 'absolute', right: 20, bottom: 90, width: 58, height: 58 },
+  fabButton: {
+    width: 58, height: 58, borderRadius: 29,
+    alignItems: 'center', justifyContent: 'center',
   },
-  sectionBar: { flexDirection: 'row', height: 52, borderTopWidth: 1 },
+  sectionBar: { flexDirection: 'row', height: DOCK_HEIGHT, borderTopWidth: 1 },
   section: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  badge: {
+    position: 'absolute', top: 8, left: '54%', minWidth: 17, height: 17,
+    borderRadius: 9, borderWidth: 2, paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-extras
+      - name: tests
+        run: uv run pytest -q
+      - name: migrations match the models
+        # A schema that only exists in create_all passes every other test and
+        # breaks the deploy.
+        run: |
+          DATABASE_URL="sqlite+aiosqlite:///./ci.db" uv run alembic upgrade head
+          DATABASE_URL="sqlite+aiosqlite:///./ci.db" uv run alembic check
+      - name: the image builds
+        run: docker build -t fihy-backend .
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit

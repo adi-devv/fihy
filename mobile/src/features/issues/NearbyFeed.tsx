@@ -5,36 +5,20 @@ import { useConfirm, useNearbyFeed } from '../../data/queries';
 import { useServices } from '../../data/context';
 import type { GeoPoint, Issue } from '../../domain/issue';
 import { metric, type as t, useTone } from '../../theme/tokens';
+import { useChromeOnScroll } from '../shell/chrome';
 import { IssueCard } from './IssueCard';
 
-export function NearbyFeed({
-  point,
-  onScrollDirection,
-}: {
-  point: GeoPoint;
-  onScrollDirection: (visible: boolean) => void;
-}) {
+export function NearbyFeed({ point }: { point: GeoPoint }) {
   const tone = useTone();
   const router = useRouter();
   const { auth } = useServices();
   const confirm = useConfirm();
   const feed = useNearbyFeed(point);
-  const lastOffset = React.useRef(0);
+  const chrome = useChromeOnScroll();
 
   const issues = useMemo(
     () => feed.data?.pages.flatMap((p) => p.items) ?? [],
     [feed.data],
-  );
-
-  const onScroll = useCallback(
-    (event: { nativeEvent: { contentOffset: { y: number } } }) => {
-      const y = event.nativeEvent.contentOffset.y;
-      if (Math.abs(y - lastOffset.current) > 8) {
-        onScrollDirection(y < lastOffset.current || y <= 0);
-        lastOffset.current = y;
-      }
-    },
-    [onScrollDirection],
   );
 
   const onConfirm = useCallback(
@@ -58,8 +42,7 @@ export function NearbyFeed({
     <FlatList
       data={issues}
       keyExtractor={(issue) => issue.id}
-      onScroll={onScroll}
-      scrollEventThrottle={16}
+      {...chrome}
       contentContainerStyle={{ paddingBottom: 96 }}
       onEndReachedThreshold={0.6}
       onEndReached={() => feed.hasNextPage && !feed.isFetchingNextPage && feed.fetchNextPage()}

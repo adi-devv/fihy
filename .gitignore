@@ -11,3 +11,5 @@ __pycache__/
 venv/
 *.pyc
 .pytest_cache/
+backend/var/
+backend/*.db

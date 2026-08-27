@@ -43,8 +43,8 @@ export function CategoryPlate({
       <View style={styles.center}>
         <CategoryGlyph category={category} size={compact ? 22 : 38} color={tone.ink} />
         {!compact && (
-          <Text style={[t.meta(9, '600', 2), { color: tone.chalk, marginTop: 10 }]}>
-            PHOTO PENDING
+          <Text style={[t.meta(11, '500', 0), { color: tone.chalk, marginTop: 10 }]}>
+            Photo pending
           </Text>
         )}
       </View>

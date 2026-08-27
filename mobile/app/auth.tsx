@@ -36,8 +36,8 @@ export default function Auth() {
 
   return (
     <View style={{ flex: 1, padding: metric.gutter }}>
-      <Text style={[t.meta(10, '600', 1.6), { color: tone.chalk }]}>
-        {sent ? 'ENTER THE CODE WE SENT' : 'PHONE IS REQUIRED TO REPORT OR CONFIRM'}
+      <Text style={[t.meta(12, '600', 0), { color: tone.chalk }]}>
+        {sent ? 'Enter the code we sent' : 'A phone number is needed to report or confirm'}
       </Text>
       <TextInput
         style={field}

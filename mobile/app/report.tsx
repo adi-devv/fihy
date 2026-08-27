@@ -7,7 +7,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useServices } from '../src/data/context';
 import { CATEGORIES, SEVERITIES, categoryLabel, severityLabel } from '../src/domain/issue';
-import type { Category, Severity } from '../src/domain/issue';
+import type { Category, Duplicate, GeoPoint, Severity } from '../src/domain/issue';
+import { DuplicateSheet } from '../src/features/issues/DuplicateSheet';
 import { CategoryGlyph } from '../src/features/issues/glyphs';
 import { metric, type as t, useTone } from '../src/theme/tokens';
 
@@ -34,8 +35,15 @@ export default function Report() {
   const [category, setCategory] = useState<Category>('pothole_road');
   const [severity, setSeverity] = useState<Severity>('medium');
   const [attached, setAttached] = useState<string[]>([]);
+  /* Minted once per composer, not per tap. A failed publish is retried with
+   * the same id, which is what lets the backend recognise the retry instead
+   * of filing a second report. */
+  const [reportId] = useState(uuid);
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<null | 'category' | 'severity'>(null);
+  /* Held between the duplicate check and whatever the person chooses, so
+   * neither branch has to ask the device for a fix a second time. */
+  const [nearby, setNearby] = useState<{ point: GeoPoint; candidates: Duplicate[] } | null>(null);
 
   const addPhoto = async () => {
     try {
@@ -48,24 +56,16 @@ export default function Report() {
 
   const publish = async () => {
     if (!auth.currentUserId()) return router.push('/auth');
-    if (!attached.length || caption.trim().length < 3) {
-      Alert.alert('Add a photo and describe what is wrong.');
-      return;
-    }
     setBusy(true);
     try {
       const point = await location.current();
-      const created = await issues.create({
-        client_report_id: uuid(),
-        title: titleFrom(caption),
-        description: caption.trim(),
-        category,
-        severity,
-        latitude: point.latitude,
-        longitude: point.longitude,
-        photos: attached,
-      });
-      router.replace(`/issues/${created.id}`);
+      const candidates = await issues.duplicates(point, category);
+      if (candidates.length) {
+        // Nothing is filed yet. The sheet decides where these photos go.
+        setNearby({ point, candidates });
+        return;
+      }
+      await file(point);
     } catch (e) {
       Alert.alert('Could not publish', (e as Error).message);
     } finally {
@@ -73,6 +73,49 @@ export default function Report() {
     }
   };
 
+  const file = async (point: GeoPoint) => {
+    const created = await issues.create({
+      client_report_id: reportId,
+      title: titleFrom(caption),
+      description: caption.trim(),
+      category,
+      severity,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      photos: attached,
+    });
+    setNearby(null);
+    router.replace(`/issues/${created.id}`);
+  };
+
+  const addToExisting = async (issueId: string) => {
+    setBusy(true);
+    try {
+      await issues.support(issueId, { body: caption.trim(), photos: attached });
+      setNearby(null);
+      router.replace(`/issues/${issueId}`);
+    } catch (e) {
+      Alert.alert('Could not add to that report', (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const postAnyway = async () => {
+    if (!nearby) return;
+    setBusy(true);
+    try {
+      await file(nearby.point);
+    } catch (e) {
+      Alert.alert('Could not publish', (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // A report is a photo plus a sentence, so the button says so by staying grey
+  // rather than accepting the tap and refusing afterwards.
+  const ready = attached.length > 0 && caption.trim().length >= 3;
   const preview = attached.at(-1);
   const wellHeight = Dimensions.get('window').height * 0.44;
 
@@ -84,10 +127,13 @@ export default function Report() {
         </Pressable>
         <Text style={[t.display(18, '600'), { color: tone.ink }]}>New report</Text>
         <Pressable
-          disabled={busy}
+          disabled={busy || !ready}
           onPress={publish}
-          style={[styles.publish, { backgroundColor: tone.accent, opacity: busy ? 0.5 : 1 }]}>
-          <Text style={[t.display(15, '600'), { color: '#000' }]}>
+          style={[
+            styles.publish,
+            { backgroundColor: ready ? tone.accent : tone.surface, opacity: busy ? 0.5 : 1 },
+          ]}>
+          <Text style={[t.display(15, '600'), { color: ready ? '#000' : tone.chalk }]}>
             {busy ? 'Publishing' : 'Publish'}
           </Text>
         </Pressable>
@@ -157,6 +203,18 @@ export default function Report() {
           This location will be public.
         </Text>
       </ScrollView>
+
+      <DuplicateSheet
+        visible={nearby !== null}
+        candidates={nearby?.candidates ?? []}
+        busy={busy}
+        onAddTo={addToExisting}
+        onPostNew={postAnyway}
+        onDiscard={() => {
+          setNearby(null);
+          router.back();
+        }}
+      />
 
       <Sheet
         visible={sheet !== null}

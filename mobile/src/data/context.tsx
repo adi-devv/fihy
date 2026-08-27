@@ -1,16 +1,31 @@
-import React, { createContext, useContext, useMemo } from 'react';
-import { ApiIssuesRepository } from './apiRepository';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  ApiIssuesRepository,
+  ApiNotificationsRepository,
+  ApiUsersRepository,
+} from './apiRepository';
 import {
   FakeAuthGateway,
   FakeIssuesRepository,
+  FakeNotificationsRepository,
+  FakeUsersRepository,
   FixedLocationService,
   StubPhotoSource,
 } from './fakeIssues';
-import type { AuthGateway, IssuesRepository, LocationService, PhotoSource } from './repository';
+import type {
+  AuthGateway,
+  IssuesRepository,
+  LocationService,
+  NotificationsRepository,
+  PhotoSource,
+  UsersRepository,
+} from './repository';
 import { ApiAuthGateway, CameraPhotoSource, DeviceLocationService } from './services';
 
 export type Services = {
   issues: IssuesRepository;
+  notifications: NotificationsRepository;
+  users: UsersRepository;
   auth: AuthGateway;
   location: LocationService;
   photos: PhotoSource;
@@ -21,9 +36,16 @@ export const DEMO = process.env.EXPO_PUBLIC_DEMO === 'true';
 
 export const demoServices = (over: Partial<Services> = {}): Services => {
   const auth = over.auth ?? new FakeAuthGateway();
+  const issues = over.issues ?? new FakeIssuesRepository(undefined, auth);
   return {
     auth,
-    issues: over.issues ?? new FakeIssuesRepository(undefined, auth),
+    issues,
+    users:
+      over.users ??
+      (issues instanceof FakeIssuesRepository
+        ? new FakeUsersRepository(issues)
+        : new FakeUsersRepository(new FakeIssuesRepository(undefined, auth))),
+    notifications: over.notifications ?? new FakeNotificationsRepository(),
     location: over.location ?? new FixedLocationService(),
     photos: over.photos ?? new StubPhotoSource(),
   };
@@ -31,6 +53,8 @@ export const demoServices = (over: Partial<Services> = {}): Services => {
 
 export const liveServices = (): Services => ({
   issues: new ApiIssuesRepository(),
+  notifications: new ApiNotificationsRepository(),
+  users: new ApiUsersRepository(),
   auth: new ApiAuthGateway(),
   location: new DeviceLocationService(),
   photos: new CameraPhotoSource(process.env.EXPO_PUBLIC_PHOTO_SOURCE === 'library' ? 'library' : 'camera'),
@@ -46,6 +70,23 @@ export function ServicesProvider({
   value?: Services;
 }) {
   const services = useMemo(() => value ?? (DEMO ? demoServices() : liveServices()), [value]);
+  // Nothing renders until the stored session is back, so no screen reads the
+  // signed-in user as null and sends a returning user to sign in again.
+  const [restored, setRestored] = useState(!services.auth.restore);
+
+  useEffect(() => {
+    if (restored) return;
+    let live = true;
+    services.auth
+      .restore?.()
+      .catch(() => undefined)
+      .finally(() => live && setRestored(true));
+    return () => {
+      live = false;
+    };
+  }, [services, restored]);
+
+  if (!restored) return null;
   return <ServicesContext.Provider value={services}>{children}</ServicesContext.Provider>;
 }
 

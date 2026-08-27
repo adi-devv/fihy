@@ -1,8 +1,8 @@
 import React from 'react';
 import {
-  Ban, BadgeCheck, CheckCheck, CircleAlert, CircleCheck, CircleDot, Copy,
-  Droplets, Flag, Footprints, HardHat, LampCeiling, Landmark, MailCheck,
-  RotateCcw, Send, TrafficCone, Trash2, TreeDeciduous, TriangleAlert,
+  Ban, BadgeCheck, CheckCheck, CircleAlert, CircleDot, ClipboardCheck, Copy,
+  Droplets, Flag, Footprints, LampCeiling, Landmark, MailCheck,
+  RotateCcw, Send, TrafficCone, Trash2, TreeDeciduous, TriangleAlert, Wrench,
 } from 'lucide-react-native';
 import type { Category, Status } from '../../domain/issue';
 
@@ -19,13 +19,18 @@ const CATEGORY_ICON = {
   other: CircleAlert,
 } as const;
 
+/**
+ * One icon per status, chosen so the two "done" states cannot be mistaken for
+ * each other: a claimed fix is paperwork (ClipboardCheck), a confirmed fix is
+ * a second check (CheckCheck).
+ */
 const STATUS_ICON = {
   reported: Flag,
   community_verified: BadgeCheck,
   submitted_to_authority: Send,
   authority_acknowledged: MailCheck,
-  in_progress: HardHat,
-  resolution_claimed: CircleCheck,
+  in_progress: Wrench,
+  resolution_claimed: ClipboardCheck,
   resolved: CheckCheck,
   reopened: RotateCcw,
   duplicate: Copy,
