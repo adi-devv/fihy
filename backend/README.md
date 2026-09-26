@@ -327,7 +327,11 @@ returns None, because an emailed complaint has no endpoint to poll. What comes
 back arrives at `POST /webhooks/inbound-mail`, HMAC-signed with
 `INBOUND_MAIL_SECRET` — the address is unguessable but the endpoint is not, and
 without a signature anyone who learned an address could post a fake resolution
-and close a real problem. `ClaudeReplyReader` turns the reply into one of
+and close a real problem. Both webhooks carry `X-Fihy-Timestamp` (Unix seconds)
+and `X-Fihy-Signature`, the hex HMAC-SHA256 of `<timestamp>.<raw body>`. A post
+more than `WEBHOOK_TOLERANCE_SECONDS` (300) from now is refused, so a captured
+one cannot be replayed later; inside the window, a reply whose `message_id` is
+already on the thread is dropped, which also absorbs provider retries. `ClaudeReplyReader` turns the reply into one of
 `acknowledged` / `in_progress` / `claimed` / `none`, defaulting to `none`,
 because saying work is finished when the reply does not say so closes a problem
 that is still there. Anything unclassifiable is still stored and still shown: a

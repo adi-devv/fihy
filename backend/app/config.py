@@ -105,6 +105,9 @@ class Settings(BaseSettings):
 
     # Shared secret the mail provider signs its webhook posts with.
     inbound_mail_secret: str = ""
+    # How far a signed post's timestamp may be from now. Outside it the post
+    # is refused, so a captured one cannot be replayed later.
+    webhook_tolerance_seconds: int = 300
     # Evidence carried on the letter itself. More than a few and it bounces on
     # size at the receiving end.
     max_letter_attachments: int = 3
