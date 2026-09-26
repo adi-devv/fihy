@@ -442,6 +442,13 @@ from rows in the database rather than an in-process counter, so the limit holds
 across workers and restarts. `/auth/otp/request` answers `204` whether or not
 the number is known.
 
+The per-IP count is only as good as the address it counts. The app believes a
+single header, `CLIENT_IP_HEADER`, which must be one the edge proxy overwrites:
+`fly-client-ip` on Fly, `cf-connecting-ip` behind Cloudflare (and then only if
+the origin cannot be reached around Cloudflare). Everything else a request
+carries, `X-Forwarded-For` included, the caller could have set, so it is
+ignored. Blank uses the connecting address, which is right with no proxy.
+
 **Closing an account.** `DELETE /me` anonymises the row rather than cascading
 it away, and the distinction is the whole design. A support is somebody else's
 evidence: cascading this person's supports would drop the confirmation count on

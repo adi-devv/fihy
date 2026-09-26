@@ -120,6 +120,10 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_requests_per_phone_per_hour: int = 5
     otp_requests_per_ip_per_hour: int = 20
+    # The one header the edge proxy writes the caller's address into:
+    # fly-client-ip on Fly, cf-connecting-ip behind Cloudflare. Blank uses the
+    # connecting address. Nothing else is read, since the caller controls it.
+    client_ip_header: str = ""
     # Writes are capped per account per hour too. Somebody signed in can still
     # flood the feed, and only OTP was ever limited.
     reports_per_user_per_hour: int = 10
