@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # A new report within this of an existing one, in the same category, is
     # probably the same thing; the report screen offers to join it instead.
     duplicate_radius_m: float = 100.0
+    # A support carrying photos has to be sent from within this of the report:
+    # the duplicate radius plus room for two phones' GPS error.
+    support_radius_m: float = 150.0
     max_radius_m: float = 50_000.0
     default_limit: int = 20
     max_limit: int = 100

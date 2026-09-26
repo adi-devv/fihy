@@ -14,7 +14,7 @@ from app.authority import AuthorityUpdate, ConcernRequest, ConcernDrafter, Reply
 from app.enums import EscalationState, MessageDirection, Status
 from app.jobs import escalate_confirmed
 from app.mail import MailTransport, OutboundEmail, compose, token_from_address
-from tests.conftest import auth, create_issue, jpeg_bytes, sign_in
+from tests.conftest import HERE, auth, create_issue, jpeg_bytes, sign_in
 
 REPORTER = "+919876543210"
 NEIGHBOUR = "+919876500001"
@@ -88,7 +88,7 @@ async def confirmed_issue(client, sender) -> str:
         await client.post(
             f"/issues/{issue_id}/supports",
             headers=auth(token),
-            data={"body": f"Still open, {phone}."},
+            data={"body": f"Still open, {phone}.", **HERE},
             files=[("photos", ("p.jpg", jpeg_bytes(320, 240), "image/jpeg"))],
         )
     return issue_id

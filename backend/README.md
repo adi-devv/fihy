@@ -213,6 +213,14 @@ follow-up photo or reply, and `_recount` leaves their row out of
 is still a `403`, because that is the old "you cannot confirm your own report"
 rule and it still holds.
 
+A support carrying photos has to come with the phone's location, within
+`SUPPORT_RADIUS_M` (150 m) of the report, or it is a `422`. Photo supports are
+what move a report to `community_verified`, and from there escalation and the
+fix-date poll, so "two people standing in the same place with a camera" has to
+be checked somewhere. 150 m is the duplicate radius plus room for two phones'
+GPS error. Words and bare supports need no location, since neither moves
+anything, and the location is checked and dropped rather than stored.
+
 Withdrawing a support deletes its photos too. They were offered as part of
 backing the report, so they leave with the backing; the reporter's own photos,
 which have no `support_id`, are untouched.

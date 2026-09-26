@@ -60,6 +60,10 @@ class SelfConfirmation(Exception):
     pass
 
 
+class NotStandingThere(Exception):
+    pass
+
+
 class EmptySupport(Exception):
     pass
 
@@ -531,6 +535,27 @@ async def _attach_photos(
     return uploads
 
 
+def _check_standing_there(
+    issue: Issue, location: tuple[float, float] | None
+) -> None:
+    """A photo corroborates a report only if it was taken where the report is.
+
+    Two people standing in the same place with a camera is the rule that
+    status, escalation and the fix-date poll all rest on. The location is
+    checked and dropped rather than stored: where somebody was is theirs.
+    """
+    if location is None:
+        raise NotStandingThere(
+            "Share your location to add photos. They count because they are "
+            "taken where the problem is."
+        )
+    radius = get_settings().support_radius_m
+    if distance_m(*location, issue.latitude, issue.longitude) > radius:
+        raise NotStandingThere(
+            f"You need to be within {radius:.0f} m of this to add photos to it."
+        )
+
+
 async def add_support(
     session: AsyncSession,
     *,
@@ -539,12 +564,14 @@ async def add_support(
     store: ObjectStore,
     body: str | None,
     photos: list[ProcessedImage],
+    location: tuple[float, float] | None = None,
 ) -> Issue:
     """Back an issue, optionally with words and photos.
 
     Supporting twice is not an error: the second call updates the row and adds
     to it, which is what a person adding a photo to something they already
-    backed expects.
+    backed expects. Photos need a location near the report; words and a bare
+    +1 do not, since neither moves its status.
     """
     is_reporter = issue.reporter_id == user.id
     if is_reporter and not body and not photos:
@@ -554,6 +581,8 @@ async def add_support(
             "You reported this, so you cannot confirm it. Confirmations count "
             "because they come from someone else."
         )
+    if photos:
+        _check_standing_there(issue, location)
 
     support = await session.scalar(
         select(Support).where(

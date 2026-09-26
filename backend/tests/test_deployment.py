@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from app.jobs import prune_otp
-from tests.conftest import auth, create_issue, jpeg_bytes, sign_in
+from tests.conftest import HERE, auth, create_issue, jpeg_bytes, sign_in
 
 REPORTER = "+919876543210"
 NEIGHBOUR = "+919876500001"
@@ -21,7 +21,7 @@ async def photo_support(client, token, issue_id, body=""):
     return await client.post(
         f"/issues/{issue_id}/supports",
         headers=auth(token),
-        data={"body": body},
+        data={"body": body, **HERE},
         files=[("photos", ("p.jpg", jpeg_bytes(320, 240), "image/jpeg"))],
     )
 
