@@ -50,6 +50,21 @@ async def test_deleting_an_account_ends_the_session(client, sender):
     assert (await client.get("/me", headers=auth(token))).status_code == 401
 
 
+async def test_a_deleted_account_cannot_refresh_its_way_back_in(client, sender):
+    await client.post("/auth/otp/request", json={"phone": REPORTER})
+    verified = await client.post(
+        "/auth/otp/verify", json={"phone": REPORTER, "code": sender.codes[REPORTER]}
+    )
+    tokens = verified.json()
+    await client.delete("/me", headers=auth(tokens["access_token"]))
+
+    response = await client.post(
+        "/auth/token/refresh", json={"refresh_token": tokens["refresh_token"]}
+    )
+
+    assert response.status_code == 401
+
+
 async def test_the_phone_number_is_gone_and_reusable(client, sender):
     token = await sign_in(client, sender, REPORTER)
     old = await me(client, token)
