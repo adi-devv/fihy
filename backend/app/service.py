@@ -440,9 +440,12 @@ async def _recount(session: AsyncSession, issue: Issue) -> None:
 
     # The clock starts when the bar is crossed and restarts if it is crossed
     # again, so a report that loses its evidence loses its head start too.
+    # Only while the crowd still holds it, though: past community_verified it
+    # has gone to the authority, which a withdrawn photo does not undo, and
+    # the fix-date poll hangs off this timestamp.
     if confirmed and issue.confirmed_at is None:
         issue.confirmed_at = utcnow()
-    elif not confirmed:
+    elif not confirmed and issue.status == Status.REPORTED:
         issue.confirmed_at = None
     if issue.status != was:
         # No actor: the crowd moved it, not any one person.

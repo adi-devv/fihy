@@ -47,6 +47,20 @@ async def open_the_window(issue_id: str, days_ago: float = 6) -> None:
         await session.commit()
 
 
+async def hand_to_the_authority(issue_id: str) -> None:
+    """Where the escalation job leaves a report it has written to BMC about."""
+    from sqlalchemy import select
+
+    from app.db import sessionmaker
+    from app.enums import Status
+    from app.models import Issue
+
+    async with sessionmaker()() as session:
+        issue = await session.scalar(select(Issue).where(Issue.id == issue_id))
+        issue.status = Status.SUBMITTED_TO_AUTHORITY
+        await session.commit()
+
+
 async def poll(client, issue_id, token=None):
     response = await client.get(
         f"/issues/{issue_id}/fix-dates", headers=auth(token) if token else {}
@@ -125,6 +139,28 @@ async def test_reconfirming_restarts_the_clock(client, sender):
 
     again = (await client.get(f"/issues/{issue_id}")).json()["confirmed_at"]
     assert again >= first, "the window counts from the new crossing"
+
+
+async def test_a_report_with_the_authority_keeps_its_clock(client, sender):
+    """A withdrawn photo does not un-send a report, so the days people have
+    committed to stay up and nobody is asked to corroborate it again."""
+    issue_id = await a_confirmed_issue(client, sender)
+    await open_the_window(issue_id)
+    await hand_to_the_authority(issue_id)
+    neighbour = await sign_in(client, sender, NEIGHBOUR)
+    when = date.today() + timedelta(days=3)
+    assert (await propose(client, neighbour, issue_id, when)).status_code == 200
+
+    third = await sign_in(client, sender, THIRD)
+    await client.delete(f"/issues/{issue_id}/supports", headers=auth(third))
+
+    detail = (await client.get(f"/issues/{issue_id}")).json()
+    assert detail["status"] == "submitted_to_authority"
+    assert detail["confirmed_at"] is not None
+    assert detail["photo_supports_needed"] == 0
+    board = await poll(client, issue_id)
+    assert board["open"] is True
+    assert [row["fix_on"] for row in board["items"]] == [when.isoformat()]
 
 
 # --- the poll --------------------------------------------------------------
